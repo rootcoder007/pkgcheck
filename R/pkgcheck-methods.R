@@ -3,7 +3,7 @@
 #' @param deps If 'TRUE', include details of dependency packages and function
 #' usage.
 #' @param ... Further arguments pass to or from other methods (not used here).
-#' @return Nothing. Method called purely for side-effect of printing to screen.
+#' @return The input object `x`, invisibly.
 #' @family pkgcheck_fns
 #' @export
 #' @examples
@@ -38,9 +38,10 @@ print.pkgcheck <- function (x, deps = FALSE, ...) {
     output_fns <- list_pkgchk_output_fns (x)
 
     cli::cli_h2 ("Package statistics")
-    x$info$pkgstats$value <- round (x$info$pkgstats$value, digits = 1)
-    x$info$pkgstats$percentile <- round (x$info$pkgstats$percentile, digits = 1)
-    print (x$info$pkgstats)
+    stats <- x$info$pkgstats
+    stats$value <- round (stats$value, digits = 1)
+    stats$percentile <- round (stats$percentile, digits = 1)
+    print (stats)
     message ("")
 
     has_print <- output_has_print (x)
@@ -80,6 +81,8 @@ print.pkgcheck <- function (x, deps = FALSE, ...) {
 
     cli::cli_h2 ("Package Versions")
     cli::cli_dl (x$meta)
+
+    return (invisible (x))
 }
 
 list_pkgchk_output_fns <- function (x) {
@@ -282,34 +285,7 @@ print_deps <- function (checks) {
     }
 }
 
-#' Generic function to print checks based on result of corresponding
-#' `output_pkgchk_` function.
-#'
-#' @param checks Full result of `pkgcheck()` call
-#' @param what Name of check which must also correspond to an internal function
-#' named `output_pkgchk_<name>`.
-#' @return Check formatted to apepar in `print` method
-#' @noRd
-print_check <- function (checks, what) {
-
-    pkg_env <- asNamespace ("pkgcheck")
-    pkg_fns <- ls (envir = pkg_env)
-
-    output_fn <- paste0 ("output_pkgchk_", what)
-    if (!output_fn %in% pkg_fns) {
-        return (NULL)
-    }
-
-    chk_output <- do.call (output_fn, list (checks), envir = pkg_env)
-
-    return (chk_output$print)
-}
-
 print_check_screen <- function (checks, what, pkg_env) {
-
-    if (length (checks$checks [[what]]) == 0L) {
-        return ()
-    }
 
     output_fn <- get (paste0 ("output_pkgchk_", what), envir = pkg_env)
 
@@ -335,7 +311,11 @@ print_check_screen <- function (checks, what, pkg_env) {
 
     if (length (chk_output$print$msg_post) > 0L) {
         cli::cli_text ()
-        cli::cli_text (chk_output$print$msg_post)
+        if (grepl ("\n", chk_output$print$msg_post)) {
+            cli::cli_verbatim (chk_output$print$msg_post)
+        } else {
+            cli::cli_text (chk_output$print$msg_post)
+        }
     }
 }
 
