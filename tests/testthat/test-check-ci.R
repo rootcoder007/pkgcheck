@@ -21,7 +21,9 @@ test_that ("check ci", {
     expect_named (ci_out$print, c ("msg_pre", "obj", "msg_post"))
     expect_length (ci_out$print$msg_pre, 1L)
     expect_length (ci_out$print$obj, 1L)
-    expect_gt (length (ci_out$print$msg_post), 3L)
+    expect_length (ci_out$print$msg_post, 1L)
+    msg_lines <- strsplit (ci_out$print$msg_post, "\n") [[1]]
+    expect_gt (length (grep ("^\\|", msg_lines)), 3L)
 
     skip_on_os ("mac")
 
@@ -44,8 +46,7 @@ test_that ("check ci", {
             "(no URL in 'DESCRIPTION')."
         )
     )
-    expect_length (ci_out$print, 1L)
-    expect_true (!nzchar (ci_out$print))
+    expect_length (ci_out$print, 3L)
     checks$checks$has_url <- TRUE
 
     checks$info$badges <- character (0L)
@@ -58,8 +59,7 @@ test_that ("check ci", {
             "and has no badges on README"
         )
     )
-    expect_length (ci_out$print, 1L)
-    expect_true (!nzchar (ci_out$print))
+    expect_length (ci_out$print, 3L)
 
     checks$info$github$workflows$conclusion <- "success"
     ci_out <- output_pkgchk_ci (checks)
@@ -74,4 +74,34 @@ test_that ("check ci", {
     expect_gt (length (ci_out$print), 0L)
     # Messge in print when no badges detected:
     expect_true (any (grepl ("There do not appear to be any", ci_out$print)))
+})
+
+test_that ("ci results only use completed runs", {
+
+    local_mocked_bindings (
+        is_test_env = function () FALSE,
+        pkginfo_url_from_desc = function (...) "https://github.com/a/b"
+    )
+    runs <- list (total_count = 3L, workflow_runs = data.frame (
+        id = 1:3,
+        name = c ("R-CMD-check.yaml", "R-CMD-check.yaml", "test-coverage.yaml"),
+        status = c ("completed", "in_progress", "completed"),
+        conclusion = c ("success", NA, "success"),
+        head_sha = c ("aaaaaa1", "bbbbbb2", "aaaaaa1"),
+        run_number = 1:3,
+        created_at = c (
+            "2026-10-18T12:00:00Z", "2026-10-18T12:30:00Z", "2026-10-18T12:00:00Z"
+        )
+    ))
+    local_mocked_bindings (
+        req_perform = function (...) NULL,
+        resp_body_json = function (...) runs,
+        .package = "httr2"
+    )
+    dat <- ci_results_gh (".")
+    expect_identical (dat$conclusion, c ("success", "success"))
+    expect_identical (dat$sha, c ("aaaaaa", "aaaaaa"))
+
+    runs$workflow_runs$status <- "in_progress"
+    expect_null (ci_results_gh ("."))
 })
